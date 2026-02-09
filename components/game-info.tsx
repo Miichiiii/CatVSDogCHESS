@@ -59,15 +59,26 @@ export default function GameInfo({
               in check!
             </p>
           ) : null}
-          
+
           {isBotThinking && (
             <div className="flex items-center gap-2 mt-2 p-2 bg-blue-200 rounded-lg animate-pulse">
               <div className="flex gap-1">
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                <div
+                  className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                ></div>
+                <div
+                  className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                ></div>
+                <div
+                  className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                ></div>
               </div>
-              <span className="text-xs font-semibold text-blue-800">AI calculating...</span>
+              <span className="text-xs font-semibold text-blue-800">
+                AI calculating...
+              </span>
             </div>
           )}
         </CardContent>

@@ -192,7 +192,7 @@ export function calculateBotMove(
   // Evaluate all moves with personality influence
   for (const move of moves) {
     let baseScore = evaluateMove(board, move, botColor);
-    
+
     // Apply personality modifiers
     if (personality === "aggressive") {
       // Boost attacking moves
@@ -212,7 +212,7 @@ export function calculateBotMove(
       }
     }
     // balanced uses default scores
-    
+
     move.score = baseScore;
   }
 
@@ -253,7 +253,7 @@ function getDefensiveBonus(board: (ChessPiece | null)[][], move: Move): number {
   let bonus = 0;
   const piece = board[move.from.row][move.from.col];
   if (!piece) return 0;
-  
+
   // Check if move protects important pieces
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 8; col++) {
@@ -268,6 +268,6 @@ function getDefensiveBonus(board: (ChessPiece | null)[][], move: Move): number {
       }
     }
   }
-  
+
   return bonus;
 }

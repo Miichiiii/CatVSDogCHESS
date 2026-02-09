@@ -72,6 +72,12 @@ export default function ChessGame() {
   // Bot thinking indicator
   const [isBotThinking, setIsBotThinking] = useState(false);
 
+  // Last move highlight
+  const [lastMove, setLastMove] = useState<{
+    from: Position;
+    to: Position;
+  } | null>(null);
+
   // Undo/Redo functionality
   const [gameHistory, setGameHistory] = useState<GameState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -79,7 +85,7 @@ export default function ChessGame() {
   // Save current game state to history
   const saveGameState = useCallback(() => {
     const state: GameState = {
-      board: board.map(row => [...row]),
+      board: board.map((row) => [...row]),
       currentPlayer,
       capturedPieces: {
         [PieceColor.WHITE]: [...capturedPieces[PieceColor.WHITE]],
@@ -89,19 +95,28 @@ export default function ChessGame() {
       laserPointerCount,
       boneCount,
     };
-    
+
     // Remove any future states if we're not at the end
     const newHistory = gameHistory.slice(0, historyIndex + 1);
     newHistory.push(state);
     setGameHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-  }, [board, currentPlayer, capturedPieces, moveHistory, laserPointerCount, boneCount, gameHistory, historyIndex]);
+  }, [
+    board,
+    currentPlayer,
+    capturedPieces,
+    moveHistory,
+    laserPointerCount,
+    boneCount,
+    gameHistory,
+    historyIndex,
+  ]);
 
   // Undo last move
   const undoMove = useCallback(() => {
     if (historyIndex > 0) {
       const prevState = gameHistory[historyIndex - 1];
-      setBoard(prevState.board.map(row => [...row]));
+      setBoard(prevState.board.map((row) => [...row]));
       setCurrentPlayer(prevState.currentPlayer);
       setCapturedPieces(prevState.capturedPieces);
       setMoveHistory(prevState.moveHistory);
@@ -116,7 +131,7 @@ export default function ChessGame() {
   const redoMove = useCallback(() => {
     if (historyIndex < gameHistory.length - 1) {
       const nextState = gameHistory[historyIndex + 1];
-      setBoard(nextState.board.map(row => [...row]));
+      setBoard(nextState.board.map((row) => [...row]));
       setCurrentPlayer(nextState.currentPlayer);
       setCapturedPieces(nextState.capturedPieces);
       setMoveHistory(nextState.moveHistory);
@@ -137,7 +152,7 @@ export default function ChessGame() {
       return Math.random() * (max - min) + min;
     }
 
-    const interval: any = setInterval(function() {
+    const interval: any = setInterval(function () {
       const timeLeft = animationEnd - Date.now();
 
       if (timeLeft <= 0) {
@@ -148,12 +163,12 @@ export default function ChessGame() {
       confetti({
         ...defaults,
         particleCount,
-        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
       });
       confetti({
         ...defaults,
         particleCount,
-        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
       });
     }, 250);
   };
@@ -172,11 +187,22 @@ export default function ChessGame() {
       gameHistory,
       historyIndex,
     };
-    localStorage.setItem('catsdogs-chess-save', JSON.stringify(gameData));
-  }, [board, currentPlayer, capturedPieces, moveHistory, gameStatus, gameSettings, laserPointerCount, boneCount, gameHistory, historyIndex]);
+    localStorage.setItem("catsdogs-chess-save", JSON.stringify(gameData));
+  }, [
+    board,
+    currentPlayer,
+    capturedPieces,
+    moveHistory,
+    gameStatus,
+    gameSettings,
+    laserPointerCount,
+    boneCount,
+    gameHistory,
+    historyIndex,
+  ]);
 
   const loadGameFromStorage = useCallback(() => {
-    const saved = localStorage.getItem('catsdogs-chess-save');
+    const saved = localStorage.getItem("catsdogs-chess-save");
     if (saved) {
       try {
         const gameData = JSON.parse(saved);
@@ -192,7 +218,7 @@ export default function ChessGame() {
         setHistoryIndex(gameData.historyIndex || -1);
         return true;
       } catch (e) {
-        console.error('Failed to load game:', e);
+        console.error("Failed to load game:", e);
         return false;
       }
     }
@@ -253,50 +279,59 @@ export default function ChessGame() {
       !isBotThinking
     ) {
       setIsBotThinking(true);
-      
-      // Add a small delay for better UX
-      const timeout = setTimeout(() => {
-        const difficulty = gameSettings.botDifficulty || "medium";
-        const personality = gameSettings.botPersonality || "balanced";
-        const botMove = calculateBotMove(board, botColor, difficulty, personality);
-        
-        if (botMove) {
-          const result = makeMove(board, botMove.from, botMove.to);
 
-          // Update captured pieces if a piece was captured
-          if (result.capturedPiece) {
-            setCapturedPieces((prev) => {
-              return {
-                ...prev,
-                [botColor]: [...prev[botColor], result.capturedPiece],
-              };
-            });
+      // Add a small delay for better UX
+      const timeout = setTimeout(
+        () => {
+          const difficulty = gameSettings.botDifficulty || "medium";
+          const personality = gameSettings.botPersonality || "balanced";
+          const botMove = calculateBotMove(
+            board,
+            botColor,
+            difficulty,
+            personality,
+          );
+
+          if (botMove) {
+            const result = makeMove(board, botMove.from, botMove.to);
+
+            // Update captured pieces if a piece was captured
+            if (result.capturedPiece) {
+              setCapturedPieces((prev) => {
+                return {
+                  ...prev,
+                  [botColor]: [...prev[botColor], result.capturedPiece],
+                };
+              });
+            }
+
+            // Add move to history
+            const fromNotation = `${String.fromCharCode(97 + botMove.from.col)}${8 - botMove.from.row}`;
+            const toNotation = `${String.fromCharCode(97 + botMove.to.col)}${8 - botMove.to.row}`;
+            const piece = board[botMove.from.row][botMove.from.col];
+            const pieceSymbol =
+              piece?.type === PieceType.PAWN ? "" : piece?.type.charAt(0);
+
+            setMoveHistory((prev) => [
+              ...prev,
+              `${pieceSymbol}${fromNotation}-${toNotation}`,
+            ]);
+
+            // Update board and switch player
+            setBoard(result.newBoard);
+            setLastMove({ from: botMove.from, to: botMove.to });
+            setCurrentPlayer((prev) =>
+              prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+            );
+
+            // Save game state after bot move
+            saveGameState();
           }
 
-          // Add move to history
-          const fromNotation = `${String.fromCharCode(97 + botMove.from.col)}${8 - botMove.from.row}`;
-          const toNotation = `${String.fromCharCode(97 + botMove.to.col)}${8 - botMove.to.row}`;
-          const piece = board[botMove.from.row][botMove.from.col];
-          const pieceSymbol =
-            piece?.type === PieceType.PAWN ? "" : piece?.type.charAt(0);
-
-          setMoveHistory((prev) => [
-            ...prev,
-            `${pieceSymbol}${fromNotation}-${toNotation}`,
-          ]);
-
-          // Update board and switch player
-          setBoard(result.newBoard);
-          setCurrentPlayer((prev) =>
-            prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
-          );
-          
-          // Save game state after bot move
-          saveGameState();
-        }
-        
-        setIsBotThinking(false);
-      }, 800); // Slightly longer delay to show thinking indicator
+          setIsBotThinking(false);
+        },
+        Math.min(800, 3000),
+      ); // Max 3 seconds thinking time
 
       return () => {
         clearTimeout(timeout);
@@ -479,11 +514,12 @@ export default function ChessGame() {
 
         // Update board and switch player
         setBoard(result.newBoard);
+        setLastMove({ from: selectedPiece, to: position });
         setCurrentPlayer((prev) =>
           prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
         );
         setSelectedPiece(null);
-        
+
         // Save game state after player move
         saveGameState();
       }
@@ -514,10 +550,8 @@ export default function ChessGame() {
       setBotColor(null);
     }
 
-    // Initialize board (crazy mode or normal)
-    const newBoard = settings.crazyMode
-      ? createCrazyBoard()
-      : initialBoardState();
+    // Initialize board
+    const newBoard = initialBoardState();
 
     setBoard(newBoard);
     setCurrentPlayer(PieceColor.WHITE);
@@ -536,15 +570,15 @@ export default function ChessGame() {
     setBoneCount(abilityCount);
     setIsLaserPointerActive(false);
     setIsBoneActive(false);
-    
+
     // Reset history
     setGameHistory([]);
     setHistoryIndex(-1);
-    
+
     // Save initial game state to history
     setTimeout(() => {
       const initialState: GameState = {
-        board: newBoard.map(row => [...row]),
+        board: newBoard.map((row) => [...row]),
         currentPlayer: PieceColor.WHITE,
         capturedPieces: {
           [PieceColor.WHITE]: [],
@@ -560,62 +594,6 @@ export default function ChessGame() {
   };
 
   // Create a crazy mode board with shuffled back ranks
-  const createCrazyBoard = (): (ChessPiece | null)[][] => {
-    const board: (ChessPiece | null)[][] = Array(8)
-      .fill(null)
-      .map(() => Array(8).fill(null));
-
-    // Set up pawns normally
-    for (let col = 0; col < 8; col++) {
-      board[1][col] = {
-        type: PieceType.PAWN,
-        color: PieceColor.BLACK,
-        hasMoved: false,
-      };
-      board[6][col] = {
-        type: PieceType.PAWN,
-        color: PieceColor.WHITE,
-        hasMoved: false,
-      };
-    }
-
-    // Shuffle back rank pieces
-    const backRankPieces = [
-      PieceType.ROOK,
-      PieceType.KNIGHT,
-      PieceType.BISHOP,
-      PieceType.QUEEN,
-      PieceType.KING,
-      PieceType.BISHOP,
-      PieceType.KNIGHT,
-      PieceType.ROOK,
-    ];
-
-    // Fisher-Yates shuffle
-    for (let i = backRankPieces.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [backRankPieces[i], backRankPieces[j]] = [
-        backRankPieces[j],
-        backRankPieces[i],
-      ];
-    }
-
-    // Place shuffled pieces
-    for (let col = 0; col < 8; col++) {
-      board[0][col] = {
-        type: backRankPieces[col],
-        color: PieceColor.BLACK,
-        hasMoved: false,
-      };
-      board[7][col] = {
-        type: backRankPieces[col],
-        color: PieceColor.WHITE,
-        hasMoved: false,
-      };
-    }
-
-    return board;
-  };
 
   return (
     <>
@@ -633,12 +611,13 @@ export default function ChessGame() {
               board={board}
               selectedPiece={selectedPiece}
               validMoves={validMoves}
+              lastMove={lastMove}
               onSquareClick={handleSquareClick}
             />
           </div>
           <div className="w-full mt-4">
-            <GameControls 
-              onReset={resetGame} 
+            <GameControls
+              onReset={resetGame}
               gameStatus={gameStatus}
               onUndo={undoMove}
               onRedo={redoMove}

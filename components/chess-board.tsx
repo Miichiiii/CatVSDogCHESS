@@ -8,6 +8,7 @@ interface ChessBoardProps {
   board: (ChessPiece | null)[][];
   selectedPiece: Position | null;
   validMoves: Position[];
+  lastMove: { from: Position; to: Position } | null;
   onSquareClick: (position: Position) => void;
 }
 
@@ -15,6 +16,7 @@ export default function ChessBoard({
   board,
   selectedPiece,
   validMoves,
+  lastMove,
   onSquareClick,
 }: ChessBoardProps) {
   const isValidMove = (row: number, col: number) => {
@@ -23,6 +25,14 @@ export default function ChessBoard({
 
   const isSelected = (row: number, col: number) => {
     return selectedPiece?.row === row && selectedPiece?.col === col;
+  };
+
+  const isLastMove = (row: number, col: number) => {
+    if (!lastMove) return false;
+    return (
+      (lastMove.from.row === row && lastMove.from.col === col) ||
+      (lastMove.to.row === row && lastMove.to.col === col)
+    );
   };
 
   // Generate column labels (a-h)
@@ -69,6 +79,7 @@ export default function ChessBoard({
                 isLight={(rowIndex + colIndex) % 2 === 0}
                 isSelected={isSelected(rowIndex, colIndex)}
                 isValidMove={isValidMove(rowIndex, colIndex)}
+                isLastMove={isLastMove(rowIndex, colIndex)}
                 onClick={() => onSquareClick({ row: rowIndex, col: colIndex })}
               />
             ))}

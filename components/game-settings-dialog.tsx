@@ -42,13 +42,6 @@ function CrazyModeInfoButton() {
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
-            <h4 className="font-bold text-purple-900">🎲 Random Setup</h4>
-            <p className="text-sm text-gray-700">
-              Back row pieces are randomly shuffled for unpredictable opening
-              strategies!
-            </p>
-          </div>
-          <div className="space-y-2">
             <h4 className="font-bold text-blue-900">🔦 Special Abilities</h4>
             <p className="text-sm text-gray-700">
               Dogs (White) can use Laser Pointers to lure cats around the board.
@@ -246,7 +239,9 @@ export default function GameSettingsDialog({
                 <RadioGroup
                   value={botPersonality}
                   onValueChange={(value) =>
-                    setBotPersonality(value as "balanced" | "aggressive" | "defensive")
+                    setBotPersonality(
+                      value as "balanced" | "aggressive" | "defensive",
+                    )
                   }
                 >
                   <div className="flex items-center space-x-2 p-2 hover:bg-cyan-200 rounded transition">

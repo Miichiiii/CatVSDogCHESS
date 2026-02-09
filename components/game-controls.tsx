@@ -1,8 +1,18 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertTriangle, Trophy, Handshake, Undo2, Redo2 } from "lucide-react";
+import {
+  RefreshCw,
+  AlertTriangle,
+  Trophy,
+  Handshake,
+  Undo2,
+  Redo2,
+  Maximize,
+  Minimize,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { useState, useEffect } from "react";
 
 interface GameControlsProps {
   onReset: () => void;
@@ -21,6 +31,32 @@ export default function GameControls({
   canUndo = false,
   canRedo = false,
 }: GameControlsProps) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Check fullscreen status on mount and listen for changes
+  useEffect(() => {
+    const checkFullscreen = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    checkFullscreen();
+    document.addEventListener("fullscreenchange", checkFullscreen);
+    return () =>
+      document.removeEventListener("fullscreenchange", checkFullscreen);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error("Error toggling fullscreen:", err);
+    }
+  };
+
   return (
     <div className="mt-4 flex flex-col items-center gap-4 w-full sm:w-auto">
       <div className="flex gap-2 w-full sm:w-auto">
@@ -49,6 +85,24 @@ export default function GameControls({
           </Button>
         )}
       </div>
+      <Button
+        onClick={toggleFullscreen}
+        variant="outline"
+        className="w-full sm:w-auto flex items-center gap-2"
+        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+      >
+        {isFullscreen ? (
+          <>
+            <Minimize className="h-5 w-5" />
+            <span className="hidden sm:inline">Exit Fullscreen</span>
+          </>
+        ) : (
+          <>
+            <Maximize className="h-5 w-5" />
+            <span className="hidden sm:inline">Fullscreen</span>
+          </>
+        )}
+      </Button>
       <Button
         onClick={onReset}
         className="w-full sm:w-auto flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold px-6 py-2 h-auto"

@@ -12,6 +12,7 @@ interface ChessSquareProps {
   isLight: boolean;
   isSelected: boolean;
   isValidMove: boolean;
+  isLastMove: boolean;
   onClick: () => void;
 }
 
@@ -21,6 +22,7 @@ export default function ChessSquare({
   isLight,
   isSelected,
   isValidMove,
+  isLastMove,
   onClick,
 }: ChessSquareProps) {
   const [animationFrame, setAnimationFrame] = useState(1);
@@ -109,18 +111,23 @@ export default function ChessSquare({
         "transition-all duration-200 ease-in-out",
         isLight ? "bg-amber-100" : "bg-amber-800",
         isSelected && "bg-yellow-300 ring-4 ring-yellow-400 ring-opacity-60",
+        isLastMove &&
+          !isSelected &&
+          (isLight ? "bg-green-200" : "bg-green-600"),
         "hover:brightness-110 active:brightness-95",
       )}
       onClick={onClick}
       data-position={`${position.row}-${position.col}`}
     >
       {piece && (
-        <div className={cn(
-          "relative w-full h-full flex items-center justify-center",
-          "transition-transform duration-300 ease-out",
-          isSelected && "scale-105",
-          "hover:scale-110"
-        )}>
+        <div
+          className={cn(
+            "relative w-full h-full flex items-center justify-center",
+            "transition-transform duration-300 ease-out",
+            isSelected && "scale-105",
+            "hover:scale-110",
+          )}
+        >
           {!imageError ? (
             <img
               src={getPieceImage()}
@@ -134,11 +141,13 @@ export default function ChessSquare({
               onError={handleImageError}
             />
           ) : (
-            <div className={cn(
-              "text-4xl md:text-5xl select-none",
-              "transition-transform duration-300 ease-out",
-              isSelected && "scale-110"
-            )}>
+            <div
+              className={cn(
+                "text-4xl md:text-5xl select-none",
+                "transition-transform duration-300 ease-out",
+                isSelected && "scale-110",
+              )}
+            >
               {getPieceOverlaySymbol(piece)}
             </div>
           )}
