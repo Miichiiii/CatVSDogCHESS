@@ -296,64 +296,74 @@ export default function ChessGame() {
     ) {
       setIsBotThinking(true);
 
-      // Add a small delay for better UX
+      // Bot-Berechnung mit kleiner Verzögerung für UI-Update
       const timeout = setTimeout(
         () => {
-          const difficulty = gameSettings.botDifficulty || "medium";
-          const personality = gameSettings.botPersonality || "balanced";
-          const botMove = calculateBotMove(
-            board,
-            botColor,
-            difficulty,
-            personality,
-          );
+          try {
+            const difficulty = gameSettings.botDifficulty || "medium";
+            const personality = gameSettings.botPersonality || "balanced";
 
-          if (botMove) {
-            const result = makeMove(board, botMove.from, botMove.to);
-
-            // Update captured pieces if a piece was captured
-            if (result.capturedPiece) {
-              setCapturedPieces((prev) => {
-                return {
-                  ...prev,
-                  [botColor]: [...prev[botColor], result.capturedPiece],
-                };
-              });
-            }
-
-            // Add move to history
-            const fromNotation = `${String.fromCharCode(97 + botMove.from.col)}${8 - botMove.from.row}`;
-            const toNotation = `${String.fromCharCode(97 + botMove.to.col)}${8 - botMove.to.row}`;
-            const piece = board[botMove.from.row][botMove.from.col];
-            const pieceSymbol =
-              piece?.type === PieceType.PAWN ? "" : piece?.type.charAt(0);
-
-            setMoveHistory((prev) => [
-              ...prev,
-              `${pieceSymbol}${fromNotation}-${toNotation}`,
-            ]);
-
-            // Update board and switch player
-            setBoard(result.newBoard);
-            setLastMove({ from: botMove.from, to: botMove.to });
-            setCurrentPlayer((prev) =>
-              prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+            const botMove = calculateBotMove(
+              board,
+              botColor,
+              difficulty,
+              personality,
             );
 
-            // Save game state after bot move
-            saveGameState();
-          } else {
-            // No valid moves found - switch turn to prevent freeze
-            console.warn("Bot has no valid moves available");
+            if (botMove) {
+              const result = makeMove(board, botMove.from, botMove.to);
+
+              // Update captured pieces if a piece was captured
+              if (result.capturedPiece) {
+                setCapturedPieces((prev) => {
+                  return {
+                    ...prev,
+                    [botColor]: [...prev[botColor], result.capturedPiece],
+                  };
+                });
+              }
+
+              // Add move to history
+              const fromNotation = `${String.fromCharCode(97 + botMove.from.col)}${8 - botMove.from.row}`;
+              const toNotation = `${String.fromCharCode(97 + botMove.to.col)}${8 - botMove.to.row}`;
+              const piece = board[botMove.from.row][botMove.from.col];
+              const pieceSymbol =
+                piece?.type === PieceType.PAWN ? "" : piece?.type.charAt(0);
+
+              setMoveHistory((prev) => [
+                ...prev,
+                `${pieceSymbol}${fromNotation}-${toNotation}`,
+              ]);
+
+              // Update board and switch player
+              setBoard(result.newBoard);
+              setLastMove({ from: botMove.from, to: botMove.to });
+              setCurrentPlayer((prev) =>
+                prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+              );
+
+              // Save game state after bot move
+              saveGameState();
+            } else {
+              // No valid moves found - switch turn to prevent freeze
+              console.warn("Bot has no valid moves available");
+              setCurrentPlayer((prev) =>
+                prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+              );
+            }
+
+            setIsBotThinking(false);
+          } catch (error) {
+            console.error("Bot move error:", error);
+            setIsBotThinking(false);
+            // Switch turn on error to prevent freeze
             setCurrentPlayer((prev) =>
               prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
             );
           }
-
-          setIsBotThinking(false);
         },
-        Math.min(800, 3000),
-      ); // Max 3 seconds thinking time
+        300, // Kurze Verzögerung für UI-Update
+      );
 
       return () => {
         clearTimeout(timeout);

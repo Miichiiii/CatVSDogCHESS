@@ -4,9 +4,7 @@ import {
   type Player,
   getValidMoves,
   makeMove,
-  isInCheck,
   isCheckmate,
-  isStalemate,
 } from "./chess-logic";
 
 // ==================== EVALUATION ====================
@@ -62,11 +60,9 @@ function evaluateBoard(board: Board, aiPlayer: Player): number {
 
 // ==================== TIMEOUT MANAGEMENT ====================
 
-// ==================== TIMEOUT MANAGEMENT ====================
-
 let timeoutStart = 0;
 let isTimeExpired = false;
-const MAX_TIME_MS = 3000;
+const MAX_TIME_MS = 3000; // 3 Sekunden Timeout
 
 let nodesEvaluated = 0;
 
@@ -81,16 +77,44 @@ function checkTimeout(): boolean {
   const elapsed = Date.now() - timeoutStart;
   if (elapsed > MAX_TIME_MS) {
     isTimeExpired = true;
+    console.log(`⏰ Timeout erreicht nach ${elapsed}ms`);
     return true;
   }
   return false;
 }
 
+// ==================== SCHNELLE MOVE GENERATION ====================
+
+/**
+ * Hole NUR gültige Züge ohne Check-Validierung (schneller!)
+ */
+function getQuickMoves(
+  board: Board,
+  player: Player,
+): Array<{ from: Position; to: Position }> {
+  const moves: Array<{ from: Position; to: Position }> = [];
+
+  for (let fromRow = 0; fromRow < 8; fromRow++) {
+    for (let fromCol = 0; fromCol < 8; fromCol++) {
+      const piece = board[fromRow][fromCol];
+      if (piece && piece.player === player) {
+        const from = { row: fromRow, col: fromCol };
+        const validMoves = getValidMoves(board, from);
+
+        for (const to of validMoves) {
+          moves.push({ from, to });
+        }
+      }
+    }
+  }
+
+  return moves;
+}
+
 // ==================== MINIMAX WITH ALPHA-BETA PRUNING ====================
 
 /**
- * Minimax-Algorithmus der WIRKLICH ALLE 4096 Positionen bewertet
- * Mit 3-Sekunden-Timeout als Sicherheitsmechanismus
+ * SCHNELLER Minimax - mit aggressivem Timeout
  */
 function minimax(
   board: Board,
@@ -100,160 +124,92 @@ function minimax(
   beta: number,
   aiPlayer: Player,
 ): number {
-  // Timeout-Check
-  if (checkTimeout()) {
+  nodesEvaluated++;
+
+  // Aggressiver Timeout-Check alle 20 Nodes
+  if (nodesEvaluated % 20 === 0 && checkTimeout()) {
+    return evaluateBoard(board, aiPlayer);
+  }
+
+  // Basis-Fall
+  if (depth === 0) {
     return evaluateBoard(board, aiPlayer);
   }
 
   const opponent: Player = aiPlayer === "cats" ? "dogs" : "cats";
   const currentPlayer = isMaximizing ? aiPlayer : opponent;
 
-  // Basis-Fall: Maximale Tiefe oder Spielende
-  if (depth === 0) {
-    return evaluateBoard(board, aiPlayer);
-  }
+  // Schnelle Move-Generation ohne vollständige Check-Validierung
+  const moves = getQuickMoves(board, currentPlayer);
 
-  if (isCheckmate(board, currentPlayer)) {
-    return isMaximizing ? -100000 : 100000;
-  }
-
-  if (isStalemate(board, currentPlayer)) {
+  if (moves.length === 0) {
+    // Keine Züge - wahrscheinlich Checkmate oder Stalemate
+    if (isCheckmate(board, currentPlayer)) {
+      return isMaximizing ? -50000 + depth : 50000 - depth;
+    }
     return 0;
   }
 
+  // Limitiere Moves für bessere Performance
+  const limitedMoves = moves.slice(0, Math.min(moves.length, 20));
+
   if (isMaximizing) {
     let maxEval = -Infinity;
-    let validMoveFound = false;
 
-    // ALLE 64 Start-Positionen
-    for (let fromRow = 0; fromRow < 8; fromRow++) {
-      for (let fromCol = 0; fromCol < 8; fromCol++) {
-        // ALLE 64 Ziel-Positionen (4096 Kombinationen)
-        for (let toRow = 0; toRow < 8; toRow++) {
-          for (let toCol = 0; toCol < 8; toCol++) {
-            nodesEvaluated++;
+    for (const move of limitedMoves) {
+      if (checkTimeout()) break;
 
-            // Timeout-Check alle 100 Nodes
-            if (nodesEvaluated % 100 === 0 && checkTimeout()) {
-              return validMoveFound ? maxEval : evaluateBoard(board, aiPlayer);
-            }
+      const newBoard = makeMove(board, move.from, move.to);
+      const evaluation = minimax(
+        newBoard,
+        depth - 1,
+        false,
+        alpha,
+        beta,
+        aiPlayer,
+      );
 
-            // Versuche den Zug auszuführen (egal ob legal oder nicht)
-            const piece = board[fromRow][fromCol];
+      maxEval = Math.max(maxEval, evaluation);
+      alpha = Math.max(alpha, evaluation);
 
-            // Nur wenn eine eigene Figur auf dem Startfeld ist
-            if (piece && piece.player === aiPlayer) {
-              // Prüfe ob dies ein gültiger Zug ist
-              const validMoves = getValidMoves(board, {
-                row: fromRow,
-                col: fromCol,
-              });
-              const isValidMove = validMoves.some(
-                (m) => m.row === toRow && m.col === toCol,
-              );
-
-              if (isValidMove) {
-                const newBoard = makeMove(
-                  board,
-                  { row: fromRow, col: fromCol },
-                  { row: toRow, col: toCol },
-                );
-
-                // Nur wenn der König nicht im Schach steht
-                if (!isInCheck(newBoard, aiPlayer)) {
-                  validMoveFound = true;
-                  const evaluation = minimax(
-                    newBoard,
-                    depth - 1,
-                    false,
-                    alpha,
-                    beta,
-                    aiPlayer,
-                  );
-                  maxEval = Math.max(maxEval, evaluation);
-                  alpha = Math.max(alpha, evaluation);
-
-                  if (beta <= alpha) {
-                    return maxEval; // Beta-Cutoff
-                  }
-                }
-              }
-            }
-            // ALLE anderen Positionen werden übersprungen aber GEZÄHLT
-          }
-        }
+      if (beta <= alpha) {
+        break; // Beta-Cutoff
       }
     }
 
-    return validMoveFound ? maxEval : evaluateBoard(board, aiPlayer);
+    return maxEval;
   } else {
     let minEval = Infinity;
-    let validMoveFound = false;
 
-    // ALLE 64 Start-Positionen
-    for (let fromRow = 0; fromRow < 8; fromRow++) {
-      for (let fromCol = 0; fromCol < 8; fromCol++) {
-        // ALLE 64 Ziel-Positionen (4096 Kombinationen)
-        for (let toRow = 0; toRow < 8; toRow++) {
-          for (let toCol = 0; toCol < 8; toCol++) {
-            nodesEvaluated++;
+    for (const move of limitedMoves) {
+      if (checkTimeout()) break;
 
-            // Timeout-Check alle 100 Nodes
-            if (nodesEvaluated % 100 === 0 && checkTimeout()) {
-              return validMoveFound ? minEval : evaluateBoard(board, aiPlayer);
-            }
+      const newBoard = makeMove(board, move.from, move.to);
+      const evaluation = minimax(
+        newBoard,
+        depth - 1,
+        true,
+        alpha,
+        beta,
+        aiPlayer,
+      );
 
-            const piece = board[fromRow][fromCol];
+      minEval = Math.min(minEval, evaluation);
+      beta = Math.min(beta, evaluation);
 
-            if (piece && piece.player === opponent) {
-              const validMoves = getValidMoves(board, {
-                row: fromRow,
-                col: fromCol,
-              });
-              const isValidMove = validMoves.some(
-                (m) => m.row === toRow && m.col === toCol,
-              );
-
-              if (isValidMove) {
-                const newBoard = makeMove(
-                  board,
-                  { row: fromRow, col: fromCol },
-                  { row: toRow, col: toCol },
-                );
-
-                if (!isInCheck(newBoard, opponent)) {
-                  validMoveFound = true;
-                  const evaluation = minimax(
-                    newBoard,
-                    depth - 1,
-                    true,
-                    alpha,
-                    beta,
-                    aiPlayer,
-                  );
-                  minEval = Math.min(minEval, evaluation);
-                  beta = Math.min(beta, evaluation);
-
-                  if (beta <= alpha) {
-                    return minEval; // Alpha-Cutoff
-                  }
-                }
-              }
-            }
-          }
-        }
+      if (beta <= alpha) {
+        break; // Alpha-Cutoff
       }
     }
 
-    return validMoveFound ? minEval : evaluateBoard(board, aiPlayer);
+    return minEval;
   }
 }
 
 // ==================== BEST MOVE FINDER ====================
 
 /**
- * Finde den besten Zug - prüft ALLE 4096 Positionen
- * Mit 3-Sekunden-Timeout als Sicherheitsmechanismus
+ * SCHNELLE Zugfindung mit Timeout-Schutz
  */
 export function findBestMove(
   board: Board,
@@ -261,87 +217,75 @@ export function findBestMove(
 ): { from: Position; to: Position } | null {
   resetTimeout();
 
-  let bestMove: { from: Position; to: Position } | null = null;
-  let bestValue = -Infinity;
-  let totalPositionsChecked = 0;
-  let legalMovesFound = 0;
-
-  console.log("🔍 Evaluiere ALLE 4096 Positionen (64×64)...");
+  console.log("🔍 Bot sucht besten Zug...");
   const startTime = performance.now();
 
-  // ALLE 64 Start-Positionen
-  for (let fromRow = 0; fromRow < 8; fromRow++) {
-    for (let fromCol = 0; fromCol < 8; fromCol++) {
-      // ALLE 64 Ziel-Positionen
-      for (let toRow = 0; toRow < 8; toRow++) {
-        for (let toCol = 0; toCol < 8; toCol++) {
-          totalPositionsChecked++;
+  try {
+    // Hole alle möglichen Züge (ohne tiefe Check-Validierung)
+    const allMoves = getQuickMoves(board, aiPlayer);
 
-          // Timeout-Check
-          if (totalPositionsChecked % 256 === 0 && checkTimeout()) {
-            console.log(
-              `⏸️ Timeout nach ${totalPositionsChecked} Positionen und ${legalMovesFound} legalen Zügen`,
-            );
-            break;
-          }
-
-          const piece = board[fromRow][fromCol];
-
-          if (piece && piece.player === aiPlayer) {
-            const validMoves = getValidMoves(board, {
-              row: fromRow,
-              col: fromCol,
-            });
-            const isValidMove = validMoves.some(
-              (m) => m.row === toRow && m.col === toCol,
-            );
-
-            if (isValidMove) {
-              const newBoard = makeMove(
-                board,
-                { row: fromRow, col: fromCol },
-                { row: toRow, col: toCol },
-              );
-
-              if (!isInCheck(newBoard, aiPlayer)) {
-                legalMovesFound++;
-                const moveValue = minimax(
-                  newBoard,
-                  2,
-                  false,
-                  -Infinity,
-                  Infinity,
-                  aiPlayer,
-                );
-
-                if (moveValue > bestValue) {
-                  bestValue = moveValue;
-                  bestMove = {
-                    from: { row: fromRow, col: fromCol },
-                    to: { row: toRow, col: toCol },
-                  };
-                }
-              }
-            }
-          }
-        }
-        if (isTimeExpired) break;
-      }
-      if (isTimeExpired) break;
+    if (allMoves.length === 0) {
+      console.warn("⚠️ Keine Züge verfügbar!");
+      return null;
     }
-    if (isTimeExpired) break;
+
+    console.log(`📋 ${allMoves.length} mögliche Züge`);
+
+    // Limitiere auf erste 30 Züge für Performance
+    const moves = allMoves.slice(0, Math.min(allMoves.length, 30));
+
+    let bestMove = moves[0];
+    let bestValue = -Infinity;
+
+    // Nur Tiefe 2 für schnelle Antwort
+    const maxDepth = 2;
+
+    for (const move of moves) {
+      if (checkTimeout()) {
+        console.log("⏸️ Timeout - nutze bisherigen besten Zug");
+        break;
+      }
+
+      const newBoard = makeMove(board, move.from, move.to);
+
+      // Schnelle Evaluation
+      let moveValue = minimax(
+        newBoard,
+        maxDepth - 1,
+        false,
+        -Infinity,
+        Infinity,
+        aiPlayer,
+      );
+
+      // Bonus für Captures
+      const capturedPiece = board[move.to.row][move.to.col];
+      if (capturedPiece) {
+        moveValue += PIECE_VALUES[capturedPiece.type] / 5;
+      }
+
+      if (moveValue > bestValue) {
+        bestValue = moveValue;
+        bestMove = move;
+      }
+    }
+
+    const endTime = performance.now();
+    const duration = (endTime - startTime) / 1000;
+
+    console.log(`⏱️ Fertig in ${duration.toFixed(2)}s`);
+    console.log(`🎯 Best: ${bestValue.toFixed(0)}, Nodes: ${nodesEvaluated}`);
+
+    return { from: bestMove.from, to: bestMove.to };
+  } catch (error) {
+    console.error("❌ Fehler bei Zugsuche:", error);
+
+    // Fallback: Nimm ersten gültigen Zug
+    const quickMoves = getQuickMoves(board, aiPlayer);
+    if (quickMoves.length > 0) {
+      return { from: quickMoves[0].from, to: quickMoves[0].to };
+    }
+
+    return null;
   }
-
-  const endTime = performance.now();
-  const duration = (endTime - startTime) / 1000;
-
-  console.log(
-    `✅ ${totalPositionsChecked} Positionen überprüft (sollte 4096 sein)`,
-  );
-  console.log(`⚖️ Davon ${legalMovesFound} legale Züge gefunden`);
-  console.log(`⏱️ Dauer: ${duration.toFixed(2)} Sekunden`);
-  console.log(`🎯 Bester Zug-Wert: ${bestValue}`);
-  console.log(`📊 Total Nodes evaluiert: ${nodesEvaluated}`);
-
-  return bestMove;
 }
