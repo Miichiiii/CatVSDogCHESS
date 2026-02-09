@@ -5,6 +5,8 @@ import ChessBoard from "./chess-board";
 import GameControls from "./game-controls";
 import GameInfo from "./game-info";
 import GameSettingsDialog, { type GameSettings } from "./game-settings-dialog";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 import {
   initialBoardState,
   PieceType,
@@ -78,9 +80,23 @@ export default function ChessGame() {
     to: Position;
   } | null>(null);
 
+  // Fullscreen state for board-only display
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
   // Undo/Redo functionality
   const [gameHistory, setGameHistory] = useState<GameState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   // Save current game state to history
   const saveGameState = useCallback(() => {
@@ -326,6 +342,12 @@ export default function ChessGame() {
 
             // Save game state after bot move
             saveGameState();
+          } else {
+            // No valid moves found - switch turn to prevent freeze
+            console.warn("Bot has no valid moves available");
+            setCurrentPlayer((prev) =>
+              prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+            );
           }
 
           setIsBotThinking(false);
@@ -335,10 +357,17 @@ export default function ChessGame() {
 
       return () => {
         clearTimeout(timeout);
-        setIsBotThinking(false);
       };
     }
-  }, [board, currentPlayer, gameSettings.gameMode, botColor, gameStatus]);
+  }, [
+    board,
+    currentPlayer,
+    gameSettings.gameMode,
+    botColor,
+    gameStatus,
+    isBotThinking,
+    saveGameState,
+  ]);
 
   // Special Abilities Handlers
   const handleUseLaserPointer = () => {
@@ -604,48 +633,85 @@ export default function ChessGame() {
         onLoadGame={loadGameFromStorage}
       />
 
-      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 w-full max-w-7xl">
-        <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-          <div className="w-full max-w-sm sm:max-w-md border-2 border-purple-300 rounded-lg bg-white shadow-lg">
-            <ChessBoard
-              board={board}
-              selectedPiece={selectedPiece}
-              validMoves={validMoves}
-              lastMove={lastMove}
-              onSquareClick={handleSquareClick}
-            />
+      {isFullscreen ? (
+        // Fullscreen board-only layout
+        <div className="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center p-2 sm:p-4">
+          <div className="w-full h-full flex flex-col items-center justify-center">
+            <div
+              className="border-2 border-purple-300 rounded-lg bg-white shadow-lg"
+              style={{ maxHeight: "90vh", maxWidth: "90vh" }}
+            >
+              <ChessBoard
+                board={board}
+                selectedPiece={selectedPiece}
+                validMoves={validMoves}
+                lastMove={lastMove}
+                onSquareClick={handleSquareClick}
+              />
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button
+                onClick={() => {
+                  if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                  }
+                }}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <X className="h-5 w-5" />
+                <span>Exit Fullscreen</span>
+              </Button>
+            </div>
           </div>
-          <div className="w-full mt-4">
-            <GameControls
-              onReset={resetGame}
+        </div>
+      ) : (
+        // Normal layout
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 w-full max-w-7xl">
+          <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+            <div className="w-full max-w-sm sm:max-w-md border-2 border-purple-300 rounded-lg bg-white shadow-lg">
+              <ChessBoard
+                board={board}
+                selectedPiece={selectedPiece}
+                validMoves={validMoves}
+                lastMove={lastMove}
+                onSquareClick={handleSquareClick}
+              />
+            </div>
+            <div className="w-full mt-4">
+              <GameControls
+                onReset={() => setShowSettingsDialog(true)}
+                gameStatus={gameStatus}
+                onUndo={undoMove}
+                onRedo={redoMove}
+                canUndo={historyIndex > 0}
+                canRedo={historyIndex < gameHistory.length - 1}
+                isFullscreen={isFullscreen}
+                onFullscreenChange={setIsFullscreen}
+              />
+            </div>
+          </div>
+          <div className="flex-1 min-w-0 space-y-4 px-2 sm:px-4">
+            <GameInfo
+              currentPlayer={currentPlayer}
               gameStatus={gameStatus}
-              onUndo={undoMove}
-              onRedo={redoMove}
-              canUndo={historyIndex > 0}
-              canRedo={historyIndex < gameHistory.length - 1}
+              moveHistory={moveHistory}
+              capturedPieces={capturedPieces}
+              isBotThinking={isBotThinking}
+            />
+            <SpecialAbilities
+              currentPlayer={currentPlayer}
+              laserPointerCount={laserPointerCount}
+              boneCount={boneCount}
+              onUseLaserPointer={handleUseLaserPointer}
+              onUseBone={handleUseBone}
+              isLaserPointerActive={isLaserPointerActive}
+              isBoneActive={isBoneActive}
+              crazyMode={gameSettings.crazyMode}
             />
           </div>
         </div>
-        <div className="flex-1 min-w-0 space-y-4 px-2 sm:px-4">
-          <GameInfo
-            currentPlayer={currentPlayer}
-            gameStatus={gameStatus}
-            moveHistory={moveHistory}
-            capturedPieces={capturedPieces}
-            isBotThinking={isBotThinking}
-          />
-          <SpecialAbilities
-            currentPlayer={currentPlayer}
-            laserPointerCount={laserPointerCount}
-            boneCount={boneCount}
-            onUseLaserPointer={handleUseLaserPointer}
-            onUseBone={handleUseBone}
-            isLaserPointerActive={isLaserPointerActive}
-            isBoneActive={isBoneActive}
-            crazyMode={gameSettings.crazyMode}
-          />
-        </div>
-      </div>
+      )}
     </>
   );
 }

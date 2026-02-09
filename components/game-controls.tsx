@@ -21,6 +21,8 @@ interface GameControlsProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
+  isFullscreen?: boolean;
+  onFullscreenChange?: (isFullscreen: boolean) => void;
 }
 
 export default function GameControls({
@@ -30,27 +32,40 @@ export default function GameControls({
   onRedo,
   canUndo = false,
   canRedo = false,
+  isFullscreen = false,
+  onFullscreenChange,
 }: GameControlsProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFS, setIsFS] = useState(isFullscreen);
+
+  useEffect(() => {
+    setIsFS(isFullscreen);
+  }, [isFullscreen]);
 
   // Check fullscreen status on mount and listen for changes
   useEffect(() => {
     const checkFullscreen = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const isNowFullscreen = !!document.fullscreenElement;
+      setIsFS(isNowFullscreen);
+      onFullscreenChange?.(isNowFullscreen);
     };
 
-    checkFullscreen();
     document.addEventListener("fullscreenchange", checkFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", checkFullscreen);
-  }, []);
+  }, [onFullscreenChange]);
 
   const toggleFullscreen = async () => {
     try {
       if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
+        // Request fullscreen on the root element
+        const element = document.documentElement;
+        if (element.requestFullscreen) {
+          await element.requestFullscreen();
+        }
       } else {
-        await document.exitFullscreen();
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
       }
     } catch (err) {
       console.error("Error toggling fullscreen:", err);
@@ -89,17 +104,17 @@ export default function GameControls({
         onClick={toggleFullscreen}
         variant="outline"
         className="w-full sm:w-auto flex items-center gap-2"
-        title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+        title={isFS ? "Exit fullscreen" : "Enter fullscreen"}
       >
-        {isFullscreen ? (
+        {isFS ? (
           <>
             <Minimize className="h-5 w-5" />
-            <span className="hidden sm:inline">Exit Fullscreen</span>
+            <span>Exit Fullscreen</span>
           </>
         ) : (
           <>
             <Maximize className="h-5 w-5" />
-            <span className="hidden sm:inline">Fullscreen</span>
+            <span>Fullscreen</span>
           </>
         )}
       </Button>
