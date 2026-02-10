@@ -148,6 +148,33 @@ export default function GameControls({
         </Card>
       )}
 
+      {gameStatus === "draw-50moves" && (
+        <Card className="w-full sm:w-auto p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300">
+          <div className="flex items-center gap-2 text-lg font-bold text-purple-700">
+            <Handshake className="h-5 w-5" />
+            <span>Draw! 50-move rule — no captures or pawn moves.</span>
+          </div>
+        </Card>
+      )}
+
+      {gameStatus === "draw-repetition" && (
+        <Card className="w-full sm:w-auto p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300">
+          <div className="flex items-center gap-2 text-lg font-bold text-purple-700">
+            <Handshake className="h-5 w-5" />
+            <span>Draw! Threefold repetition.</span>
+          </div>
+        </Card>
+      )}
+
+      {gameStatus === "draw-insufficient" && (
+        <Card className="w-full sm:w-auto p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300">
+          <div className="flex items-center gap-2 text-lg font-bold text-purple-700">
+            <Handshake className="h-5 w-5" />
+            <span>Draw! Insufficient material.</span>
+          </div>
+        </Card>
+      )}
+
       {gameStatus.includes("check") && !gameStatus.includes("checkmate") && (
         <Card className="w-full sm:w-auto p-3 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-300">
           <div className="flex items-center gap-2 text-base font-semibold text-orange-700">

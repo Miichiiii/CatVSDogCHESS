@@ -58,6 +58,22 @@ export default function GameInfo({
               {gameStatus.split("-")[1] === PieceColor.WHITE ? "Dogs" : "Cats"}{" "}
               in check!
             </p>
+          ) : gameStatus === "draw-50moves" ? (
+            <p className="text-sm text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">
+              🤝 Draw — 50-move rule!
+            </p>
+          ) : gameStatus === "draw-repetition" ? (
+            <p className="text-sm text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">
+              🤝 Draw — Threefold repetition!
+            </p>
+          ) : gameStatus === "draw-insufficient" ? (
+            <p className="text-sm text-purple-600 font-bold bg-purple-100 px-2 py-1 rounded">
+              🤝 Draw — Insufficient material!
+            </p>
+          ) : gameStatus === "stalemate" ? (
+            <p className="text-sm text-yellow-600 font-bold bg-yellow-100 px-2 py-1 rounded">
+              🤝 Stalemate — Draw!
+            </p>
           ) : null}
 
           {isBotThinking && (

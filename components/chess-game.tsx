@@ -6,6 +6,12 @@ import GameControls from "./game-controls";
 import GameInfo from "./game-info";
 import GameSettingsDialog, { type GameSettings } from "./game-settings-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import {
   initialBoardState,
@@ -13,6 +19,7 @@ import {
   PieceColor,
   type ChessPiece,
   type Position,
+  type EnPassantTarget,
 } from "@/lib/chess-types";
 import {
   isValidMove,
@@ -20,6 +27,13 @@ import {
   isCheck,
   isCheckmate,
   isStalemate,
+  promotePawn,
+  hasInsufficientMaterial,
+  boardToString,
+  checkThreefoldRepetition,
+  getEnPassantTarget,
+  setEnPassantTarget,
+  clearEnPassantTarget,
 } from "@/lib/chess-rules";
 import { calculateBotMove } from "@/lib/chess-bot";
 import SpecialAbilities from "./special-abilities";
@@ -37,6 +51,9 @@ interface GameState {
   moveHistory: string[];
   laserPointerCount: number;
   boneCount: number;
+  enPassantTarget: EnPassantTarget | null;
+  movesSinceLastCaptureOrPawn: number;
+  positionHistory: string[];
 }
 
 export default function ChessGame() {
@@ -87,6 +104,27 @@ export default function ChessGame() {
   const [gameHistory, setGameHistory] = useState<GameState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
+  // Pawn promotion state
+  const [showPromotionDialog, setShowPromotionDialog] = useState(false);
+  const [promotionPosition, setPromotionPosition] = useState<Position | null>(
+    null,
+  );
+  const [promotionColor, setPromotionColor] = useState<PieceColor>(
+    PieceColor.WHITE,
+  );
+  const [pendingPromotionBoard, setPendingPromotionBoard] = useState<
+    (ChessPiece | null)[][] | null
+  >(null);
+  const [pendingPromotionMove, setPendingPromotionMove] = useState<{
+    from: Position;
+    to: Position;
+  } | null>(null);
+
+  // Draw condition tracking
+  const [movesSinceLastCaptureOrPawn, setMovesSinceLastCaptureOrPawn] =
+    useState(0);
+  const [positionHistory, setPositionHistory] = useState<string[]>([]);
+
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -110,6 +148,9 @@ export default function ChessGame() {
       moveHistory: [...moveHistory],
       laserPointerCount,
       boneCount,
+      enPassantTarget: getEnPassantTarget(),
+      movesSinceLastCaptureOrPawn,
+      positionHistory: [...positionHistory],
     };
 
     // Remove any future states if we're not at the end
@@ -126,6 +167,8 @@ export default function ChessGame() {
     boneCount,
     gameHistory,
     historyIndex,
+    movesSinceLastCaptureOrPawn,
+    positionHistory,
   ]);
 
   // Undo last move
@@ -138,6 +181,15 @@ export default function ChessGame() {
       setMoveHistory(prevState.moveHistory);
       setLaserPointerCount(prevState.laserPointerCount);
       setBoneCount(prevState.boneCount);
+      setMovesSinceLastCaptureOrPawn(
+        prevState.movesSinceLastCaptureOrPawn || 0,
+      );
+      setPositionHistory(prevState.positionHistory || []);
+      if (prevState.enPassantTarget) {
+        setEnPassantTarget(prevState.enPassantTarget);
+      } else {
+        clearEnPassantTarget();
+      }
       setHistoryIndex(historyIndex - 1);
       setSelectedPiece(null);
     }
@@ -153,6 +205,15 @@ export default function ChessGame() {
       setMoveHistory(nextState.moveHistory);
       setLaserPointerCount(nextState.laserPointerCount);
       setBoneCount(nextState.boneCount);
+      setMovesSinceLastCaptureOrPawn(
+        nextState.movesSinceLastCaptureOrPawn || 0,
+      );
+      setPositionHistory(nextState.positionHistory || []);
+      if (nextState.enPassantTarget) {
+        setEnPassantTarget(nextState.enPassantTarget);
+      } else {
+        clearEnPassantTarget();
+      }
       setHistoryIndex(historyIndex + 1);
       setSelectedPiece(null);
     }
@@ -202,6 +263,9 @@ export default function ChessGame() {
       boneCount,
       gameHistory,
       historyIndex,
+      enPassantTarget: getEnPassantTarget(),
+      movesSinceLastCaptureOrPawn,
+      positionHistory,
     };
     localStorage.setItem("catsdogs-chess-save", JSON.stringify(gameData));
   }, [
@@ -215,6 +279,8 @@ export default function ChessGame() {
     boneCount,
     gameHistory,
     historyIndex,
+    movesSinceLastCaptureOrPawn,
+    positionHistory,
   ]);
 
   const loadGameFromStorage = useCallback(() => {
@@ -232,6 +298,15 @@ export default function ChessGame() {
         setBoneCount(gameData.boneCount);
         setGameHistory(gameData.gameHistory || []);
         setHistoryIndex(gameData.historyIndex || -1);
+        setMovesSinceLastCaptureOrPawn(
+          gameData.movesSinceLastCaptureOrPawn || 0,
+        );
+        setPositionHistory(gameData.positionHistory || []);
+        if (gameData.enPassantTarget) {
+          setEnPassantTarget(gameData.enPassantTarget);
+        } else {
+          clearEnPassantTarget();
+        }
         return true;
       } catch (e) {
         console.error("Failed to load game:", e);
@@ -269,8 +344,11 @@ export default function ChessGame() {
     }
   }, [selectedPiece, board, currentPlayer]);
 
-  // Check for check, checkmate, or stalemate after each move
+  // Check for check, checkmate, stalemate, or draw after each move
   useEffect(() => {
+    // Don't update game status while promotion dialog is open
+    if (showPromotionDialog) return;
+
     if (isCheckmate(board, currentPlayer)) {
       const winner = currentPlayer === PieceColor.WHITE ? "black" : "white";
       setGameStatus(`checkmate-${winner}`);
@@ -278,12 +356,25 @@ export default function ChessGame() {
       triggerConfetti();
     } else if (isStalemate(board, currentPlayer)) {
       setGameStatus("stalemate");
+    } else if (hasInsufficientMaterial(board)) {
+      setGameStatus("draw-insufficient");
+    } else if (movesSinceLastCaptureOrPawn >= 100) {
+      // 50-move rule: 100 half-moves = 50 full moves
+      setGameStatus("draw-50moves");
+    } else if (checkThreefoldRepetition(positionHistory)) {
+      setGameStatus("draw-repetition");
     } else if (isCheck(board, currentPlayer)) {
       setGameStatus(`check-${currentPlayer}`);
     } else {
       setGameStatus("ongoing");
     }
-  }, [board, currentPlayer]);
+  }, [
+    board,
+    currentPlayer,
+    showPromotionDialog,
+    movesSinceLastCaptureOrPawn,
+    positionHistory,
+  ]);
 
   // Bot move logic
   useEffect(() => {
@@ -292,11 +383,16 @@ export default function ChessGame() {
       botColor === currentPlayer &&
       !gameStatus.includes("checkmate") &&
       gameStatus !== "stalemate" &&
-      !isBotThinking
+      !gameStatus.startsWith("draw") &&
+      !isBotThinking &&
+      !showPromotionDialog
     ) {
       setIsBotThinking(true);
 
-      // Bot-Berechnung mit kleiner Verzögerung für UI-Update
+      // 10-second safety timeout
+      let forceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+      let moveCompleted = false;
+
       const timeout = setTimeout(
         () => {
           try {
@@ -310,23 +406,47 @@ export default function ChessGame() {
               personality,
             );
 
+            if (moveCompleted) return; // Safety timeout already triggered
+            moveCompleted = true;
+            if (forceTimeoutId) clearTimeout(forceTimeoutId);
+
             if (botMove) {
+              const piece = board[botMove.from.row][botMove.from.col];
               const result = makeMove(board, botMove.from, botMove.to);
+
+              // Handle bot promotion: auto-promote to queen
+              let finalBoard = result.newBoard;
+              if (result.isPromotion && result.promotionPosition) {
+                finalBoard = promotePawn(
+                  finalBoard,
+                  result.promotionPosition,
+                  PieceType.QUEEN,
+                );
+              }
 
               // Update captured pieces if a piece was captured
               if (result.capturedPiece) {
-                setCapturedPieces((prev) => {
-                  return {
-                    ...prev,
-                    [botColor]: [...prev[botColor], result.capturedPiece],
-                  };
-                });
+                setCapturedPieces((prev) => ({
+                  ...prev,
+                  [botColor]: [...prev[botColor], result.capturedPiece!],
+                }));
               }
+
+              // Update draw tracking
+              const isPawnMove = piece?.type === PieceType.PAWN;
+              if (result.capturedPiece || isPawnMove) {
+                setMovesSinceLastCaptureOrPawn(0);
+              } else {
+                setMovesSinceLastCaptureOrPawn((prev) => prev + 1);
+              }
+
+              // Update position history
+              const posString = boardToString(finalBoard);
+              setPositionHistory((prev) => [...prev, posString]);
 
               // Add move to history
               const fromNotation = `${String.fromCharCode(97 + botMove.from.col)}${8 - botMove.from.row}`;
               const toNotation = `${String.fromCharCode(97 + botMove.to.col)}${8 - botMove.to.row}`;
-              const piece = board[botMove.from.row][botMove.from.col];
               const pieceSymbol =
                 piece?.type === PieceType.PAWN ? "" : piece?.type.charAt(0);
 
@@ -336,7 +456,7 @@ export default function ChessGame() {
               ]);
 
               // Update board and switch player
-              setBoard(result.newBoard);
+              setBoard(finalBoard);
               setLastMove({ from: botMove.from, to: botMove.to });
               setCurrentPlayer((prev) =>
                 prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
@@ -362,11 +482,71 @@ export default function ChessGame() {
             );
           }
         },
-        300, // Kurze Verzögerung für UI-Update
+        300, // Short delay for UI update
       );
+
+      // Force timeout after 10 seconds - bot MUST make a move
+      forceTimeoutId = setTimeout(() => {
+        if (!moveCompleted) {
+          moveCompleted = true;
+          clearTimeout(timeout);
+          console.warn("Bot exceeded 10s time limit, forcing random move");
+
+          // Import random legal move logic inline
+          try {
+            const { getAllLegalMoves } = require("@/lib/chess-logic");
+            const logicBoard = board.map((row: (ChessPiece | null)[]) =>
+              row.map((piece: ChessPiece | null) => {
+                if (!piece) return null;
+                return {
+                  type: piece.type.toLowerCase(),
+                  player: piece.color === PieceColor.WHITE ? "dogs" : "cats",
+                  hasMoved: piece.hasMoved,
+                };
+              }),
+            );
+            const botPlayer = botColor === PieceColor.WHITE ? "dogs" : "cats";
+            const legalMoves = getAllLegalMoves(logicBoard, botPlayer);
+            if (legalMoves.length > 0) {
+              const randomMove =
+                legalMoves[Math.floor(Math.random() * legalMoves.length)];
+              const result = makeMove(board, randomMove.from, randomMove.to);
+
+              let finalBoard = result.newBoard;
+              if (result.isPromotion && result.promotionPosition) {
+                finalBoard = promotePawn(
+                  finalBoard,
+                  result.promotionPosition,
+                  PieceType.QUEEN,
+                );
+              }
+
+              if (result.capturedPiece) {
+                setCapturedPieces((prev) => ({
+                  ...prev,
+                  [botColor!]: [...prev[botColor!], result.capturedPiece!],
+                }));
+              }
+
+              setBoard(finalBoard);
+              setLastMove({ from: randomMove.from, to: randomMove.to });
+              setCurrentPlayer((prev) =>
+                prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+              );
+            }
+          } catch (e) {
+            console.error("Force timeout fallback error:", e);
+            setCurrentPlayer((prev) =>
+              prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+            );
+          }
+          setIsBotThinking(false);
+        }
+      }, 10000);
 
       return () => {
         clearTimeout(timeout);
+        if (forceTimeoutId) clearTimeout(forceTimeoutId);
       };
     }
   }, [
@@ -377,6 +557,7 @@ export default function ChessGame() {
     gameStatus,
     isBotThinking,
     saveGameState,
+    showPromotionDialog,
   ]);
 
   // Special Abilities Handlers
@@ -482,9 +663,16 @@ export default function ChessGame() {
 
   const handleSquareClick = (position: Position) => {
     // If game is over, don't allow further moves
-    if (gameStatus.includes("checkmate") || gameStatus === "stalemate") {
+    if (
+      gameStatus.includes("checkmate") ||
+      gameStatus === "stalemate" ||
+      gameStatus.startsWith("draw")
+    ) {
       return;
     }
+
+    // Don't allow moves while promotion dialog is open
+    if (showPromotionDialog) return;
 
     // Handle special abilities in Crazy Mode
     if (gameSettings.crazyMode) {
@@ -522,34 +710,53 @@ export default function ChessGame() {
           (move) => move.row === position.row && move.col === position.col,
         )
       ) {
+        const movingPiece = board[selectedPiece.row][selectedPiece.col];
         const result = makeMove(board, selectedPiece, position);
 
         // Update captured pieces if a piece was captured
         if (result.capturedPiece) {
-          setCapturedPieces((prev) => {
-            const oppositeColor =
-              currentPlayer === PieceColor.WHITE
-                ? PieceColor.BLACK
-                : PieceColor.WHITE;
-            return {
-              ...prev,
-              [currentPlayer]: [...prev[currentPlayer], result.capturedPiece],
-            };
-          });
+          setCapturedPieces((prev) => ({
+            ...prev,
+            [currentPlayer]: [...prev[currentPlayer], result.capturedPiece!],
+          }));
+        }
+
+        // Update draw tracking (50-move rule)
+        const isPawnMove = movingPiece?.type === PieceType.PAWN;
+        if (result.capturedPiece || isPawnMove) {
+          setMovesSinceLastCaptureOrPawn(0);
+        } else {
+          setMovesSinceLastCaptureOrPawn((prev) => prev + 1);
+        }
+
+        // Check if this is a promotion
+        if (result.isPromotion && result.promotionPosition) {
+          // Show promotion dialog - don't switch player yet
+          setPromotionPosition(result.promotionPosition);
+          setPromotionColor(currentPlayer);
+          setPendingPromotionBoard(result.newBoard);
+          setPendingPromotionMove({ from: selectedPiece, to: position });
+          setShowPromotionDialog(true);
+          setSelectedPiece(null);
+          return;
         }
 
         // Add move to history
         const fromNotation = `${String.fromCharCode(97 + selectedPiece.col)}${8 - selectedPiece.row}`;
         const toNotation = `${String.fromCharCode(97 + position.col)}${8 - position.row}`;
         const pieceSymbol =
-          board[selectedPiece.row][selectedPiece.col]?.type === PieceType.PAWN
+          movingPiece?.type === PieceType.PAWN
             ? ""
-            : board[selectedPiece.row][selectedPiece.col]?.type.charAt(0);
+            : movingPiece?.type.charAt(0);
 
         setMoveHistory((prev) => [
           ...prev,
           `${pieceSymbol}${fromNotation}-${toNotation}`,
         ]);
+
+        // Update position history for threefold repetition
+        const posString = boardToString(result.newBoard);
+        setPositionHistory((prev) => [...prev, posString]);
 
         // Update board and switch player
         setBoard(result.newBoard);
@@ -572,6 +779,66 @@ export default function ChessGame() {
       setSelectedPiece(position);
     }
   };
+
+  // Handle pawn promotion selection
+  const handlePromotionSelect = useCallback(
+    (pieceType: PieceType) => {
+      if (!promotionPosition || !pendingPromotionBoard || !pendingPromotionMove)
+        return;
+
+      const promotedBoard = promotePawn(
+        pendingPromotionBoard,
+        promotionPosition,
+        pieceType,
+      );
+
+      // Add move to history
+      const fromNotation = `${String.fromCharCode(97 + pendingPromotionMove.from.col)}${8 - pendingPromotionMove.from.row}`;
+      const toNotation = `${String.fromCharCode(97 + pendingPromotionMove.to.col)}${8 - pendingPromotionMove.to.row}`;
+      const promotionChar =
+        pieceType === PieceType.QUEEN
+          ? "Q"
+          : pieceType === PieceType.ROOK
+            ? "R"
+            : pieceType === PieceType.BISHOP
+              ? "B"
+              : "N";
+
+      setMoveHistory((prev) => [
+        ...prev,
+        `${fromNotation}-${toNotation}=${promotionChar}`,
+      ]);
+
+      // Update position history
+      const posString = boardToString(promotedBoard);
+      setPositionHistory((prev) => [...prev, posString]);
+
+      // Update board and switch player
+      setBoard(promotedBoard);
+      setLastMove({
+        from: pendingPromotionMove.from,
+        to: pendingPromotionMove.to,
+      });
+      setCurrentPlayer((prev) =>
+        prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
+      );
+
+      // Clean up promotion state
+      setShowPromotionDialog(false);
+      setPromotionPosition(null);
+      setPendingPromotionBoard(null);
+      setPendingPromotionMove(null);
+
+      // Save game state after promotion
+      saveGameState();
+    },
+    [
+      promotionPosition,
+      pendingPromotionBoard,
+      pendingPromotionMove,
+      saveGameState,
+    ],
+  );
 
   const resetGame = () => {
     setShowSettingsDialog(true);
@@ -610,6 +877,17 @@ export default function ChessGame() {
     setIsLaserPointerActive(false);
     setIsBoneActive(false);
 
+    // Reset draw tracking
+    setMovesSinceLastCaptureOrPawn(0);
+    setPositionHistory([]);
+    clearEnPassantTarget();
+
+    // Reset promotion state
+    setShowPromotionDialog(false);
+    setPromotionPosition(null);
+    setPendingPromotionBoard(null);
+    setPendingPromotionMove(null);
+
     // Reset history
     setGameHistory([]);
     setHistoryIndex(-1);
@@ -626,6 +904,9 @@ export default function ChessGame() {
         moveHistory: [],
         laserPointerCount: abilityCount,
         boneCount: abilityCount,
+        enPassantTarget: null,
+        movesSinceLastCaptureOrPawn: 0,
+        positionHistory: [],
       };
       setGameHistory([initialState]);
       setHistoryIndex(0);
@@ -642,6 +923,54 @@ export default function ChessGame() {
         onStartGame={startNewGame}
         onLoadGame={loadGameFromStorage}
       />
+
+      {/* Pawn Promotion Dialog */}
+      <Dialog open={showPromotionDialog} onOpenChange={() => {}}>
+        <DialogContent
+          className="sm:max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg">
+              🎉 Pawn Promotion! Choose a piece:
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center gap-4 py-4">
+            {[
+              {
+                type: PieceType.QUEEN,
+                label: "Queen",
+                emoji: promotionColor === PieceColor.WHITE ? "♕" : "♛",
+              },
+              {
+                type: PieceType.ROOK,
+                label: "Rook",
+                emoji: promotionColor === PieceColor.WHITE ? "♖" : "♜",
+              },
+              {
+                type: PieceType.BISHOP,
+                label: "Bishop",
+                emoji: promotionColor === PieceColor.WHITE ? "♗" : "♝",
+              },
+              {
+                type: PieceType.KNIGHT,
+                label: "Knight",
+                emoji: promotionColor === PieceColor.WHITE ? "♘" : "♞",
+              },
+            ].map(({ type, label, emoji }) => (
+              <Button
+                key={type}
+                variant="outline"
+                className="flex flex-col items-center gap-1 p-3 h-auto min-w-[70px] hover:bg-purple-100 hover:border-purple-400 transition-colors"
+                onClick={() => handlePromotionSelect(type)}
+              >
+                <span className="text-3xl">{emoji}</span>
+                <span className="text-xs font-medium">{label}</span>
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {isFullscreen ? (
         // Fullscreen board-only layout

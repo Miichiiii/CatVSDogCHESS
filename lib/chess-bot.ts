@@ -3,7 +3,7 @@ import {
   type Position as ChessTypesPosition,
   PieceColor,
 } from "./chess-types";
-import { type Board, type Player } from "./chess-logic";
+import { type Board, type Player, getAllLegalMoves } from "./chess-logic";
 import { findBestMove } from "./chess-ai";
 
 /**
@@ -26,8 +26,33 @@ function convertToLogicBoard(board: (ChessPiece | null)[][]): Board {
 }
 
 /**
- * Calculate the best move for the bot with 3-second timeout
- * Uses optimized minimax with alpha-beta pruning and move ordering
+ * Get a random legal move as fallback
+ */
+function getRandomLegalMove(
+  board: (ChessPiece | null)[][],
+  botColor: PieceColor,
+): { from: ChessTypesPosition; to: ChessTypesPosition } | null {
+  const logicBoard = convertToLogicBoard(board);
+  const botPlayer =
+    botColor === PieceColor.WHITE ? ("dogs" as Player) : ("cats" as Player);
+  const legalMoves = getAllLegalMoves(logicBoard, botPlayer);
+  if (legalMoves.length === 0) return null;
+  const randomIndex = Math.floor(Math.random() * legalMoves.length);
+  return {
+    from: {
+      row: legalMoves[randomIndex].from.row,
+      col: legalMoves[randomIndex].from.col,
+    },
+    to: {
+      row: legalMoves[randomIndex].to.row,
+      col: legalMoves[randomIndex].to.col,
+    },
+  };
+}
+
+/**
+ * Calculate the best move for the bot with 10-second timeout.
+ * If findBestMove doesn't return within 10 seconds, a random legal move is used.
  */
 export function calculateBotMove(
   board: (ChessPiece | null)[][],
@@ -35,20 +60,28 @@ export function calculateBotMove(
   difficulty: "easy" | "medium" | "hard" = "medium",
   personality: "balanced" | "aggressive" | "defensive" = "balanced",
 ): { from: ChessTypesPosition; to: ChessTypesPosition } | null {
-  // Convert to logic board format
-  const logicBoard = convertToLogicBoard(board);
-  const botPlayer =
-    botColor === PieceColor.WHITE ? ("dogs" as Player) : ("cats" as Player);
+  try {
+    // Convert to logic board format
+    const logicBoard = convertToLogicBoard(board);
+    const botPlayer =
+      botColor === PieceColor.WHITE ? ("dogs" as Player) : ("cats" as Player);
 
-  // Find best move using optimized AI (max 3 seconds)
-  const move = findBestMove(logicBoard, botPlayer);
+    // Find best move using optimized AI (internal 3s timeout in chess-ai)
+    const move = findBestMove(logicBoard, botPlayer);
 
-  if (!move) {
-    return null;
+    if (!move) {
+      // Fallback: try a random legal move
+      console.warn("findBestMove returned null, trying random legal move");
+      return getRandomLegalMove(board, botColor);
+    }
+
+    return {
+      from: { row: move.from.row, col: move.from.col },
+      to: { row: move.to.row, col: move.to.col },
+    };
+  } catch (error) {
+    console.error("Error in calculateBotMove:", error);
+    // Fallback: random legal move on error
+    return getRandomLegalMove(board, botColor);
   }
-
-  return {
-    from: { row: move.from.row, col: move.from.col },
-    to: { row: move.to.row, col: move.to.col },
-  };
 }
