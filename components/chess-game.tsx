@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import ChessBoard from "./chess-board";
 import GameControls from "./game-controls";
 import GameInfo from "./game-info";
@@ -90,6 +90,9 @@ export default function ChessGame() {
 
   // Bot thinking indicator
   const [isBotThinking, setIsBotThinking] = useState(false);
+  const isBotThinkingRef = useRef(false);
+  const botTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const botForceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Last move highlight
   const [lastMove, setLastMove] = useState<{
@@ -376,7 +379,7 @@ export default function ChessGame() {
     positionHistory,
   ]);
 
-  // Bot move logic
+  // Bot move logic — uses refs to avoid cleanup race condition
   useEffect(() => {
     if (
       gameSettings.gameMode === "pvbot" &&
@@ -384,16 +387,19 @@ export default function ChessGame() {
       !gameStatus.includes("checkmate") &&
       gameStatus !== "stalemate" &&
       !gameStatus.startsWith("draw") &&
-      !isBotThinking &&
+      !isBotThinkingRef.current &&
       !showPromotionDialog
     ) {
+      isBotThinkingRef.current = true;
       setIsBotThinking(true);
 
-      // 10-second safety timeout
-      let forceTimeoutId: ReturnType<typeof setTimeout> | null = null;
+      // Clear any lingering timeouts
+      if (botTimeoutRef.current) clearTimeout(botTimeoutRef.current);
+      if (botForceTimeoutRef.current) clearTimeout(botForceTimeoutRef.current);
+
       let moveCompleted = false;
 
-      const timeout = setTimeout(
+      botTimeoutRef.current = setTimeout(
         () => {
           try {
             const difficulty = gameSettings.botDifficulty || "medium";
@@ -408,7 +414,8 @@ export default function ChessGame() {
 
             if (moveCompleted) return; // Safety timeout already triggered
             moveCompleted = true;
-            if (forceTimeoutId) clearTimeout(forceTimeoutId);
+            if (botForceTimeoutRef.current)
+              clearTimeout(botForceTimeoutRef.current);
 
             if (botMove) {
               const piece = board[botMove.from.row][botMove.from.col];
@@ -472,9 +479,11 @@ export default function ChessGame() {
               );
             }
 
+            isBotThinkingRef.current = false;
             setIsBotThinking(false);
           } catch (error) {
             console.error("Bot move error:", error);
+            isBotThinkingRef.current = false;
             setIsBotThinking(false);
             // Switch turn on error to prevent freeze
             setCurrentPlayer((prev) =>
@@ -486,13 +495,12 @@ export default function ChessGame() {
       );
 
       // Force timeout after 10 seconds - bot MUST make a move
-      forceTimeoutId = setTimeout(() => {
+      botForceTimeoutRef.current = setTimeout(() => {
         if (!moveCompleted) {
           moveCompleted = true;
-          clearTimeout(timeout);
+          if (botTimeoutRef.current) clearTimeout(botTimeoutRef.current);
           console.warn("Bot exceeded 10s time limit, forcing random move");
 
-          // Import random legal move logic inline
           try {
             const { getAllLegalMoves } = require("@/lib/chess-logic");
             const logicBoard = board.map((row: (ChessPiece | null)[]) =>
@@ -540,14 +548,12 @@ export default function ChessGame() {
               prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
             );
           }
+          isBotThinkingRef.current = false;
           setIsBotThinking(false);
         }
       }, 10000);
 
-      return () => {
-        clearTimeout(timeout);
-        if (forceTimeoutId) clearTimeout(forceTimeoutId);
-      };
+      // NO cleanup that kills the timeout — refs handle lifecycle
     }
   }, [
     board,
@@ -555,7 +561,6 @@ export default function ChessGame() {
     gameSettings.gameMode,
     botColor,
     gameStatus,
-    isBotThinking,
     saveGameState,
     showPromotionDialog,
   ]);
@@ -881,6 +886,12 @@ export default function ChessGame() {
     setMovesSinceLastCaptureOrPawn(0);
     setPositionHistory([]);
     clearEnPassantTarget();
+
+    // Reset bot thinking state
+    isBotThinkingRef.current = false;
+    setIsBotThinking(false);
+    if (botTimeoutRef.current) clearTimeout(botTimeoutRef.current);
+    if (botForceTimeoutRef.current) clearTimeout(botForceTimeoutRef.current);
 
     // Reset promotion state
     setShowPromotionDialog(false);

@@ -49,7 +49,7 @@ export default function GameInfo({
 
           {gameStatus === "ongoing" ? (
             <p className="text-sm text-blue-700">
-              {isBotThinking ? "🤖 Bot is thinking..." : "Game in progress"}
+              {isBotThinking ? "🤖 Hmm..." : "Game in progress"}
             </p>
           ) : gameStatus.includes("check") &&
             !gameStatus.includes("checkmate") ? (
