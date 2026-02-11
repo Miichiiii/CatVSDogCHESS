@@ -80,9 +80,9 @@ export default function GameSettingsDialog({
   onStartGame,
   onLoadGame,
 }: GameSettingsDialogProps) {
-  const [gameMode, setGameMode] = useState<"pvp" | "pvbot">("pvp");
+  const [gameMode, setGameMode] = useState<"pvp" | "pvbot">("pvbot");
   const [crazyMode, setCrazyMode] = useState(false);
-  const [playerColor, setPlayerColor] = useState<"white" | "black">("white");
+  const [playerColor, setPlayerColor] = useState<"white" | "black">("black");
   const [specialAbilityCount, setSpecialAbilityCount] = useState<number>(3);
   const [botDifficulty, setBotDifficulty] = useState<
     "easy" | "medium" | "hard"

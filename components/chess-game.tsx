@@ -77,10 +77,13 @@ export default function ChessGame() {
   // Game settings
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [gameSettings, setGameSettings] = useState<GameSettings>({
-    gameMode: "pvp",
+    gameMode: "pvbot",
     crazyMode: false,
+    playerColor: "black",
+    botDifficulty: "medium",
+    botPersonality: "balanced",
   });
-  const [botColor, setBotColor] = useState<PieceColor | null>(null);
+  const [botColor, setBotColor] = useState<PieceColor | null>(PieceColor.WHITE);
 
   // Special abilities for Crazy Mode
   const [laserPointerCount, setLaserPointerCount] = useState(3);
@@ -884,19 +887,27 @@ export default function ChessGame() {
     setGameSettings(settings);
 
     // Determine bot color if playing against bot
+    let nextBotColor: PieceColor | null = null;
     if (settings.gameMode === "pvbot" && settings.playerColor) {
-      setBotColor(
-        settings.playerColor === "white" ? PieceColor.BLACK : PieceColor.WHITE,
-      );
+      nextBotColor =
+        settings.playerColor === "white" ? PieceColor.BLACK : PieceColor.WHITE;
+      setBotColor(nextBotColor);
     } else {
       setBotColor(null);
     }
+
+    const initialCurrentPlayer =
+      settings.gameMode === "pvbot" &&
+      settings.playerColor === "white" &&
+      nextBotColor === PieceColor.BLACK
+        ? PieceColor.BLACK
+        : PieceColor.WHITE;
 
     // Initialize board
     const newBoard = initialBoardState();
 
     setBoard(newBoard);
-    setCurrentPlayer(PieceColor.WHITE);
+    setCurrentPlayer(initialCurrentPlayer);
     setSelectedPiece(null);
     setValidMoves([]);
     setGameStatus("ongoing");
@@ -938,7 +949,7 @@ export default function ChessGame() {
     setTimeout(() => {
       const initialState: GameState = {
         board: newBoard.map((row) => [...row]),
-        currentPlayer: PieceColor.WHITE,
+        currentPlayer: initialCurrentPlayer,
         capturedPieces: {
           [PieceColor.WHITE]: [],
           [PieceColor.BLACK]: [],
