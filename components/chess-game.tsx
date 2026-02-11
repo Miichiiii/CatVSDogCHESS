@@ -128,6 +128,31 @@ export default function ChessGame() {
     useState(0);
   const [positionHistory, setPositionHistory] = useState<string[]>([]);
 
+  const catMoveAudioRef = useRef<HTMLAudioElement | null>(null);
+  const dogMoveAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    catMoveAudioRef.current = new Audio("/pieces/movements/cat.mp3");
+    dogMoveAudioRef.current = new Audio("/pieces/movements/dog.mp3");
+    if (catMoveAudioRef.current) catMoveAudioRef.current.preload = "auto";
+    if (dogMoveAudioRef.current) dogMoveAudioRef.current.preload = "auto";
+  }, []);
+
+  const playMoveSound = useCallback((color: PieceColor) => {
+    const audio =
+      color === PieceColor.BLACK
+        ? catMoveAudioRef.current
+        : dogMoveAudioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise) {
+      playPromise.catch(() => {
+        // Ignore autoplay or user-gesture restrictions.
+      });
+    }
+  }, []);
+
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -465,6 +490,7 @@ export default function ChessGame() {
               // Update board and switch player
               setBoard(finalBoard);
               setLastMove({ from: botMove.from, to: botMove.to });
+              playMoveSound(botColor);
               setCurrentPlayer((prev) =>
                 prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
               );
@@ -538,6 +564,7 @@ export default function ChessGame() {
 
               setBoard(finalBoard);
               setLastMove({ from: randomMove.from, to: randomMove.to });
+              playMoveSound(botColor!);
               setCurrentPlayer((prev) =>
                 prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
               );
@@ -608,6 +635,7 @@ export default function ChessGame() {
       newBoard[closestPiece.row][closestPiece.col] = null;
 
       setBoard(newBoard);
+      playMoveSound(currentPlayer);
       setLaserPointerCount((prev) => prev - 1);
       setMoveHistory((prev) => [
         ...prev,
@@ -651,6 +679,7 @@ export default function ChessGame() {
       newBoard[closestPiece.row][closestPiece.col] = null;
 
       setBoard(newBoard);
+      playMoveSound(currentPlayer);
       setBoneCount((prev) => prev - 1);
       setMoveHistory((prev) => [
         ...prev,
@@ -766,6 +795,7 @@ export default function ChessGame() {
         // Update board and switch player
         setBoard(result.newBoard);
         setLastMove({ from: selectedPiece, to: position });
+        playMoveSound(currentPlayer);
         setCurrentPlayer((prev) =>
           prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
         );
@@ -824,6 +854,7 @@ export default function ChessGame() {
         from: pendingPromotionMove.from,
         to: pendingPromotionMove.to,
       });
+      playMoveSound(promotionColor);
       setCurrentPlayer((prev) =>
         prev === PieceColor.WHITE ? PieceColor.BLACK : PieceColor.WHITE,
       );
